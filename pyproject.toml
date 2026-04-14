@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "industrial-ros2-mcp"
+version = "0.1.0"
+description = "Production-grade MCP server bridging LLMs with industrial robotic systems via ROS2 and NVIDIA Isaac Sim"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10,<3.15"
+authors = [
+    {name = "Marijan Miletic"},
+]
+keywords = ["mcp", "ros2", "robotics", "isaac-sim", "industrial-automation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "fastmcp>=2.0.0",
+    "pyyaml>=6.0",
+    "numpy>=1.24.0",
+    "Pillow>=10.0.0",
+]
+
+[project.optional-dependencies]
+ros2 = [
+    # rclpy and sensor_msgs installed via ROS2 apt packages
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+industrial-mcp = "mcp_server.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

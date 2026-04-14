@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  mcp-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.mcp
+    container_name: industrial-mcp-server
+    stdin_open: true
+    environment:
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+    network_mode: host
+    restart: unless-stopped

@@ -1,0 +1,86 @@
+# Factory Cell Layout Definition
+# Coordinate system: X-forward, Y-left, Z-up (ROS2 REP-103)
+# Units: meters
+
+factory_cell:
+  name: "Assembly Cell 01"
+  dimensions:
+    length: 8.0  # X
+    width: 6.0   # Y
+    height: 3.5  # Z
+
+  robot:
+    model: "UR10e"
+    manufacturer: "Universal Robots"
+    base_position: [0.0, 0.0, 0.85]  # On pedestal
+    pedestal:
+      dimensions: [0.4, 0.4, 0.85]
+      material: "steel"
+
+  conveyors:
+    input:
+      name: "Input Conveyor"
+      start: [2.0, 0.0, 0.75]
+      end: [0.8, 0.0, 0.75]
+      width: 0.5
+      speed: 0.1  # m/s
+      direction: "-X"
+    output:
+      name: "Output Conveyor"
+      start: [-0.8, 0.0, 0.75]
+      end: [-2.0, 0.0, 0.75]
+      width: 0.5
+      speed: 0.1
+      direction: "-X"
+
+  inspection_station:
+    name: "Quality Inspection Station"
+    position: [0.0, -1.0, 0.75]
+    dimensions: [0.6, 0.6, 0.05]
+    lighting:
+      type: "ring_light"
+      intensity: 800  # lux
+
+  cameras:
+    wrist:
+      name: "Wrist Camera"
+      frame_id: "tool0"
+      type: "RGB"
+      resolution: [1280, 720]
+      fov: 60
+      topic: "/camera_wrist/color/image_raw"
+    overhead:
+      name: "Overhead Camera"
+      position: [0.0, 0.0, 2.5]
+      orientation: [0.0, 1.5708, 0.0]  # Looking down
+      type: "RGB"
+      resolution: [1920, 1080]
+      fov: 90
+      topic: "/camera_overhead/color/image_raw"
+    inspection:
+      name: "Inspection Camera"
+      position: [0.3, -1.0, 1.5]
+      orientation: [-0.7854, 0.0, 0.0]  # 45 deg angle
+      type: "RGB"
+      resolution: [1920, 1080]
+      fov: 45
+      topic: "/camera_inspection/color/image_raw"
+
+  safety_zones:
+    light_curtain:
+      type: "Type 4 Safety Light Curtain"
+      positions:
+        - start: [1.5, -2.0, 0.0]
+          end: [1.5, 2.0, 2.0]
+        - start: [-1.5, -2.0, 0.0]
+          end: [-1.5, 2.0, 2.0]
+    collaborative_zone:
+      radius: 1.5  # meters from robot base
+      speed_limit: 0.25  # m/s when human detected
+
+  workpieces:
+    default:
+      type: "box"
+      dimensions: [0.05, 0.05, 0.03]
+      mass: 0.15  # kg
+      material: "aluminum"
