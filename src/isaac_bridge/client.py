@@ -1,6 +1,6 @@
 """Client that connects the MCP server to the Isaac Sim bridge over TCP socket.
 
-The bridge_server.py runs inside Isaac Sim and listens on localhost:54321.
+The bridge_server.py runs inside Isaac Sim and listens on localhost:55123.
 This client sends JSON commands and receives JSON responses.
 """
 
@@ -12,7 +12,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 BRIDGE_HOST = "127.0.0.1"
-BRIDGE_PORT = 54321
+BRIDGE_PORT = 55123
 CONNECT_TIMEOUT = 3.0
 RECV_TIMEOUT = 15.0
 

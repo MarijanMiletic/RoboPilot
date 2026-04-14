@@ -31,7 +31,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [BRIDGE] %(levelname
 logger = logging.getLogger("bridge_server")
 
 BRIDGE_HOST = "127.0.0.1"
-BRIDGE_PORT = 54321
+BRIDGE_PORT = 55123
 
 
 class IsaacBridgeServer:
@@ -41,11 +41,15 @@ class IsaacBridgeServer:
         print("[BRIDGE] Starting Isaac Sim...", flush=True)
         from isaacsim import SimulationApp
 
-        self.simulation_app = SimulationApp({"headless": headless})
+        self.simulation_app = SimulationApp({
+            "headless": headless,
+            "renderer": "RayTracedLighting",
+            "anti_aliasing": 0,
+        })
         print("[BRIDGE] SimulationApp created, warming up...", flush=True)
 
         # Let Kit process a few frames so the renderer settles
-        for i in range(5):
+        for i in range(10):
             self.simulation_app.update()
         print("[BRIDGE] Warmup done, importing modules...", flush=True)
 
@@ -94,80 +98,113 @@ class IsaacBridgeServer:
         self.world.scene.add_default_ground_plane()
         self.simulation_app.update()
 
-        # ── Robot mounting table (with collision so robot doesn't fall through) ─
-        print("[BRIDGE] Adding robot table...", flush=True)
-        self.world.scene.add(
-            self.FixedCuboid(
-                prim_path="/World/RobotTable",
-                name="robot_table",
-                position=np.array([0.0, 0.0, 0.4]),
-                scale=np.array([0.6, 0.6, 0.8]),
-                color=np.array([0.3, 0.3, 0.35]),
-            )
-        )
-        self.simulation_app.update()
+        # ── UR10 robot directly on ground (fixed-base, doesn't need table) ──
+        print("[BRIDGE] Checking assets root path...", flush=True)
+        from isaacsim.storage.native import get_assets_root_path
+        assets_root = get_assets_root_path()
+        print(f"[BRIDGE] Assets root: {assets_root}", flush=True)
 
         print("[BRIDGE] Adding UR10 robot (this may take a moment)...", flush=True)
         self.ur10 = self.world.scene.add(
             self.UR10(
                 prim_path="/World/UR10",
                 name="my_ur10",
-                position=np.array([0.0, 0.0, 0.8]),
+                position=np.array([0.0, 0.0, 0.0]),
                 attach_gripper=True,
             )
         )
-        print("[BRIDGE] UR10 added!", flush=True)
-        self.simulation_app.update()
+        print("[BRIDGE] UR10 added! Waiting for meshes to load from S3...", flush=True)
+        for i in range(60):
+            self.simulation_app.update()
+        print("[BRIDGE] Mesh loading frames done", flush=True)
+
+        # Debug: print the robot prim to verify it loaded
+        stage = self.world.stage
+        ur10_prim = stage.GetPrimAtPath("/World/UR10")
+        print(f"[BRIDGE] UR10 prim valid: {ur10_prim.IsValid()}", flush=True)
+        print(f"[BRIDGE] UR10 children: {[c.GetName() for c in ur10_prim.GetChildren()]}", flush=True)
+        # Check if visual meshes exist
+        base_vis = stage.GetPrimAtPath("/World/UR10/base_link/visuals")
+        print(f"[BRIDGE] base_link/visuals valid: {base_vis.IsValid()}", flush=True)
+        if base_vis.IsValid():
+            print(f"[BRIDGE] base_link/visuals children: {[c.GetName() for c in base_vis.GetChildren()]}", flush=True)
 
         print("[BRIDGE] Adding workspace objects...", flush=True)
-        # Input conveyor — to the right of robot (FixedCuboid so workpiece doesn't fall through)
+        # Input table — low flat surface in front-right of robot
         self.world.scene.add(
             self.FixedCuboid(
                 prim_path="/World/InputConveyor",
                 name="input_conveyor",
-                position=np.array([0.9, 0.0, 0.35]),
-                scale=np.array([0.5, 0.4, 0.7]),
-                color=np.array([0.2, 0.2, 0.25]),
+                position=np.array([0.5, 0.35, 0.2]),
+                scale=np.array([0.3, 0.3, 0.02]),
+                color=np.array([0.35, 0.35, 0.4]),
             )
         )
 
-        # Output conveyor — to the left of robot
+        # Output table — low flat surface in front-left of robot
         self.world.scene.add(
             self.FixedCuboid(
                 prim_path="/World/OutputConveyor",
                 name="output_conveyor",
-                position=np.array([-0.9, 0.0, 0.35]),
-                scale=np.array([0.5, 0.4, 0.7]),
-                color=np.array([0.2, 0.2, 0.25]),
+                position=np.array([0.5, -0.35, 0.2]),
+                scale=np.array([0.3, 0.3, 0.02]),
+                color=np.array([0.35, 0.35, 0.4]),
             )
         )
 
-        # Sample workpiece — on top of input conveyor
+        # Legs for input table
+        for i, (ly,) in enumerate([(0.2,), (0.5,)]):
+            self.world.scene.add(
+                self.VisualCuboid(
+                    prim_path=f"/World/InputLeg{i}",
+                    name=f"input_leg_{i}",
+                    position=np.array([0.5, ly, 0.1]),
+                    scale=np.array([0.02, 0.02, 0.19]),
+                    color=np.array([0.3, 0.3, 0.3]),
+                )
+            )
+
+        # Legs for output table
+        for i, (ly,) in enumerate([(-0.2,), (-0.5,)]):
+            self.world.scene.add(
+                self.VisualCuboid(
+                    prim_path=f"/World/OutputLeg{i}",
+                    name=f"output_leg_{i}",
+                    position=np.array([0.5, ly, 0.1]),
+                    scale=np.array([0.02, 0.02, 0.19]),
+                    color=np.array([0.3, 0.3, 0.3]),
+                )
+            )
+
+        # Sample workpiece — on top of input table
         self.workpiece = self.world.scene.add(
             self.DynamicCuboid(
                 prim_path="/World/Workpiece",
                 name="workpiece",
-                position=np.array([0.9, 0.0, 0.75]),
-                scale=np.array([0.04, 0.04, 0.03]),
-                color=np.array([1.0, 0.5, 0.0]),
+                position=np.array([0.5, 0.35, 0.23]),
+                scale=np.array([0.04, 0.04, 0.04]),
+                color=np.array([1.0, 0.4, 0.0]),
                 mass=0.15,
             )
         )
         self.simulation_app.update()
 
+        # Set default joint state BEFORE world.reset() so robot starts upright
+        print("[BRIDGE] Setting default joint positions (home pose)...", flush=True)
+        home_joints = np.array([0.0, -1.5708, 1.5708, -1.5708, 0.0, 0.0])
+        self.ur10.set_joints_default_state(positions=home_joints)
+
         print("[BRIDGE] Resetting world (initializing physics)...", flush=True)
         self.world.reset()
-        # Step a few frames so articulations initialize properly
-        for _ in range(10):
+        for _ in range(20):
             self.world.step(render=True)
         print("[BRIDGE] Physics initialized", flush=True)
 
-        # Set robot to upright "home" pose (all-zeros = arm stretched flat)
-        print("[BRIDGE] Setting home pose...", flush=True)
-        home_joints = np.array([0.0, -1.5708, 1.5708, -1.5708, 0.0, 0.0])
+        # Reinforce home pose via controller
+        print("[BRIDGE] Reinforcing home pose...", flush=True)
         action = self.ArticulationAction(joint_positions=home_joints)
         self.ur10.get_articulation_controller().apply_action(action)
-        for _ in range(30):
+        for _ in range(60):
             self.world.step(render=True)
         print("[BRIDGE] Robot in home position", flush=True)
 
@@ -202,8 +239,8 @@ class IsaacBridgeServer:
         from isaacsim.core.utils.viewports import set_camera_view
 
         set_camera_view(
-            eye=np.array([2.5, 2.0, 2.0]),
-            target=np.array([0.0, 0.0, 0.8]),
+            eye=np.array([1.5, 1.0, 1.0]),
+            target=np.array([0.2, 0.0, 0.4]),
         )
         self.simulation_app.update()
 
@@ -249,7 +286,7 @@ class IsaacBridgeServer:
             return {"success": False, "error": str(e)}
 
     def _cmd_get_joint_positions(self) -> dict:
-        positions = self.ur10.get_joint_positions()
+        positions = np.asarray(self.ur10.get_joint_positions()).flatten()
         names = [
             "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
             "wrist_1_joint", "wrist_2_joint", "wrist_3_joint",
@@ -257,22 +294,25 @@ class IsaacBridgeServer:
         return {
             "success": True,
             "joint_names": names,
-            "positions_rad": [round(float(p), 4) for p in positions[:6]],
-            "positions_deg": [round(float(np.degrees(p)), 2) for p in positions[:6]],
+            "positions_rad": [round(float(positions[i]), 4) for i in range(6)],
+            "positions_deg": [round(float(np.degrees(positions[i])), 2) for i in range(6)],
         }
 
     def _cmd_get_ee_pose(self) -> dict:
         ee_pos, ee_rot = self.ik_solver.compute_end_effector_pose()
+        # Flatten numpy arrays to scalar floats
+        pos = np.asarray(ee_pos).flatten()
+        rot = np.asarray(ee_rot).flatten()
         position = {
-            "x": round(float(ee_pos[0]), 4),
-            "y": round(float(ee_pos[1]), 4),
-            "z": round(float(ee_pos[2]), 4),
+            "x": round(float(pos[0]), 4),
+            "y": round(float(pos[1]), 4),
+            "z": round(float(pos[2]), 4),
         }
         orientation = {
-            "qx": round(float(ee_rot[1]), 4),
-            "qy": round(float(ee_rot[2]), 4),
-            "qz": round(float(ee_rot[3]), 4),
-            "qw": round(float(ee_rot[0]), 4),
+            "qx": round(float(rot[1]), 4),
+            "qy": round(float(rot[2]), 4),
+            "qz": round(float(rot[3]), 4),
+            "qw": round(float(rot[0]), 4),
         }
         return {
             "success": True,
@@ -362,10 +402,22 @@ class IsaacBridgeServer:
         """Start TCP socket server in a background thread."""
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server.bind((BRIDGE_HOST, BRIDGE_PORT))
+
+        # Retry bind in case port is still held from a previous run
+        for attempt in range(10):
+            try:
+                server.bind((BRIDGE_HOST, BRIDGE_PORT))
+                break
+            except PermissionError:
+                print(f"[BRIDGE] Port {BRIDGE_PORT} busy, retrying in 3s ({attempt+1}/10)...", flush=True)
+                time.sleep(3)
+        else:
+            print(f"[BRIDGE] ERROR: Could not bind port {BRIDGE_PORT} after 10 attempts", flush=True)
+            return
+
         server.listen(5)
         server.settimeout(1.0)
-        logger.info("Bridge socket listening on %s:%d", BRIDGE_HOST, BRIDGE_PORT)
+        print(f"[BRIDGE] Socket listening on {BRIDGE_HOST}:{BRIDGE_PORT}", flush=True)
 
         def accept_loop():
             while self.simulation_app.is_running():
